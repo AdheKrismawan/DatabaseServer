@@ -1,0 +1,147 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="PlcExpertCmd" Id="{daec8a8f-543c-488c-8811-048ffdd0d21d}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM PlcExpertCmd
+VAR
+	// Get local time from operating system
+	fbLocalTime		: FB_LocalSystemTime;	
+	
+	// Database write and read FB
+	fbPlcDbCmd		: FB_PLCDBCmdEvt(sNetID := '', tTimeout := T#5S);
+	
+	// SQL query string
+    sCmdWrite     	: STRING (1000); 
+	sCmdRead     	: STRING (1000); 
+	
+	// Write and read data
+    stWriteDb     	: ST_WriteDb;
+	stReadConvDb	: ST_ReadConvDb;
+	nLimit			: UINT := 1;
+    aPara         	: ARRAY[0..3] OF ST_ExpParameter;
+	stPara			: ST_ExpParameter;
+	nRecord			: UDINT;
+	
+	// Program state
+	nDbState		: INT;
+	
+	// Record trigger
+	bMcRun			: BOOL;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[// Timestamp sync
+fbLocalTime(
+	sNetID:= , 
+	bEnable:= TRUE, 
+	dwCycle:= , 
+	dwOpt:= , 
+	tTimeout:= , 
+	bValid=> , 
+	systemTime=> , 
+	tzID=> );
+	
+// Value
+stWriteDb.sMachine := 'Milling';
+stWriteDb.sWorkpiece := 'Shaft';
+
+// Parameter configuration
+aPara[0].sParaName := 'sMachine';    
+aPara[0].eParaType := E_ExpParameterType.STRING_;      
+aPara[0].nParaSize := 21;
+
+aPara[1].sParaName := 'sWorkpiece';   
+aPara[1].eParaType := E_ExpParameterType.STRING_;      
+aPara[1].nParaSize := 21;
+
+aPara[2].sParaName := 'dtTimeStart';  
+aPara[2].eParaType := E_ExpParameterType.DateTime;      
+aPara[2].nParaSize := 4;
+
+aPara[3].sParaName := 'dtTimeStop';  
+aPara[3].eParaType := E_ExpParameterType.DateTime;      
+aPara[3].nParaSize := 4;
+
+stPara.sParaName := 'nLimit';  
+stPara.eParaType := E_ExpParameterType.Int16;      
+stPara.nParaSize := 2;
+
+// SQL command
+sCmdWrite := 'INSERT INTO productionlog (machine, workpiece, timestart, timestop) 
+	VALUES ({sMachine}, {sWorkpiece}, {dtTimeStart}, {dtTimeStop})';
+	
+sCmdRead := 'SELECT * FROM viewinterval
+	ORDER BY id DESC
+	LIMIT {nLimit}';
+
+// Program sequence
+CASE nDbState OF
+	0 : // Init
+		bMcRun := FALSE;
+		
+		nDbState := nDbState + 10;
+		
+	10 : // Wait machine run
+		IF bMcRun THEN
+			nDbState := nDbState + 10;
+		END_IF
+		
+	20 : // Record time start
+		stWriteDb.dtTimeStart := SYSTEMTIME_TO_DT(fbLocalTime.systemTime);
+		
+		nDbState := nDbState + 10;
+		
+	30 : // Wait machine stop
+		IF NOT bMcRun THEN
+			nDbState := nDbState + 10;
+		END_IF
+		
+	40 : // Record time stop
+		stWriteDb.dtTimeStop := SYSTEMTIME_TO_DT(fbLocalTime.systemTime);
+		
+		nDbState := nDbState + 10;
+		
+	50 : // Write database
+		IF fbPlcDbCmd.Execute(
+			hDBID:= 1, 
+			pExpression:= ADR(sCmdWrite), 
+			cbExpression:= SIZEOF(sCmdWrite), 
+			pData:= ADR(stWriteDb), 
+			cbData:= SIZEOF(stWriteDb), 
+			pParameter:= ADR(aPara), 
+			cbParameter:= SIZEOF(aPara)) 
+		THEN
+			IF fbPlcDbCmd.bError THEN
+				nDbState := 1000; 
+			ELSE
+				nDbState := 100;
+			END_IF
+		END_IF
+	
+	100 : // Read database with duration
+		IF fbPlcDbCmd.ExecuteDataReturn(
+			hDBID:= 1, 
+			pExpression:= ADR(sCmdRead), 
+			cbExpression:= SIZEOF(sCmdRead), 
+			pData:= ADR(nLimit), 
+			cbData:= SIZEOF(nLimit), 
+			pParameter:= ADR(stPara), 
+			cbParameter:= SIZEOF(stPara),
+			nStartIndex:= 0, 
+			nRecordCount:= 10, 
+			pReturnData:= ADR(stReadConvDb), 
+			cbReturnData:= SIZEOF(stReadConvDb), 
+			pRecords:= ADR(nRecord))
+		THEN
+			IF fbPlcDbCmd.bError THEN
+				nDbState := 1000; 
+			ELSE
+				nDbState := 0;
+			END_IF
+		END_IF
+		
+	1000 : // Error handling
+	
+END_CASE]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

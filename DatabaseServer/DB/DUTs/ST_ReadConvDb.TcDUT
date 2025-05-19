@@ -1,0 +1,15 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="ST_ReadConvDb" Id="{3aeea6be-4d0a-49e3-b992-ca8ddb54615f}">
+    <Declaration><![CDATA[TYPE ST_ReadConvDb :
+STRUCT
+	nId			: DINT;
+	sMachine	: STRING(20);
+	sWorkpiece	: STRING(20);
+	dtTimestart	: DT;
+	dtTimestop	: DT;
+	sDuration	: STRING(255); // interval data type not supported
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

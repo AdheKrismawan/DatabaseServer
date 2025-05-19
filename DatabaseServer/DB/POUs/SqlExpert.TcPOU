@@ -1,0 +1,166 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="SqlExpert" Id="{1931b47d-fe4b-4ffa-a423-e824ab7e0a57}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM SqlExpert
+VAR
+	// Get local time from operating system
+	fbLocalTime				: FB_LocalSystemTime;	
+	
+	// Database interaction FB
+	fbSqlDatabase			: FB_SQLDatabaseEvt(sNetID:='', tTimeout:=T#10S);
+	fbSqlCommand 			: FB_SQLCommandEvt(sNetID := '', tTimeout := T#10S);
+    fbSqlResult				: FB_SQLResultEvt(sNetID:='', tTimeout:=T#10S);
+	
+	// SQL command
+	fbCmdWrite				: FB_FormatString;
+	sMachine				: STRING(255);
+	sWorkpiece				: STRING(255);
+	sTimeStart				: STRING(255);
+	sTimeStop				: STRING(255);
+	sCmdWrite				: STRING(1000);
+	sCmdRead				: STRING(1000);
+	
+	// Read data
+	stReadConvDb			: ST_ReadConvDb;
+	
+	// Program state
+	nDbState				: INT;
+	
+	// Record trigger
+	bMcRun					: BOOL;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[// Timestamp sync
+fbLocalTime(
+	sNetID:= , 
+	bEnable:= TRUE, 
+	dwCycle:= , 
+	dwOpt:= , 
+	tTimeout:= , 
+	bValid=> , 
+	systemTime=> , 
+	tzID=> );
+
+// Value
+sMachine := 'Milling';
+sWorkpiece := 'Shaft';
+	
+// String manipulation
+fbCmdWrite(
+	sFormat:= 'INSERT INTO productionlog (machine, workpiece, timestart, timestop) 
+			  VALUES ($'%s$', $'%s$', $'%s$', $'%s$')', 
+	arg1:= F_STRING(sMachine), 
+	arg2:= F_STRING(sWorkpiece), 
+	arg3:= F_STRING(sTimeStart), 
+	arg4:= F_STRING(sTimeStop), 
+	arg5:= , 
+	arg6:= , 
+	arg7:= , 
+	arg8:= , 
+	arg9:= , 
+	arg10:= , 
+	bError=> , 
+	nErrId=> , 
+	sOut=> sCmdWrite);
+
+sCmdRead := 'SELECT id, machine, workpiece, timestart, timestop, to_char(duration, $'HH24:MI:SS$'::text) AS duration
+   			FROM productionlog
+			ORDER BY id DESC
+			LIMIT 1';
+
+// Program sequence
+CASE nDbState OF
+	0 : // Init
+		bMcRun := FALSE;
+		
+		nDbState := nDbState + 10;
+		
+	10 : // Connect to database
+		IF fbSqlDatabase.Connect(hDBID:= 1) THEN
+			IF fbSqlDatabase.bError THEN
+				nDbState := 1000;
+			ELSE
+				nDbState := nDbState + 10;
+			END_IF
+		END_IF
+		
+	20 : // Init command instance
+		IF fbSqlDatabase.CreateCmd(pSQLCommand:= ADR(fbSqlCommand)) THEN
+			IF fbSqlDatabase.bError THEN
+				nDbState := 1000;
+			ELSE
+				nDbState := 100;
+			END_IF
+		END_IF
+		
+	100 : // Wait machine run
+		IF bMcRun THEN
+			nDbState := nDbState + 10;
+		END_IF
+		
+	110 : // Record time start
+		sTimeStart := CONCAT(CONCAT(MID(STR:= SYSTEMTIME_TO_STRING(fbLocalTime.systemTime), LEN:= 10, POS:= 1),' '),
+			MID(STR:= SYSTEMTIME_TO_STRING(fbLocalTime.systemTime), LEN:= 8, POS:= 12));
+		
+		nDbState := nDbState + 10;
+		
+	120 : // Wait machine stop
+		IF NOT bMcRun THEN
+			nDbState := nDbState + 10;
+		END_IF
+		
+	130 : // Record time stop
+		sTimeStop := CONCAT(CONCAT(MID(STR:= SYSTEMTIME_TO_STRING(fbLocalTime.systemTime), LEN:= 10, POS:= 1),' '),
+			MID(STR:= SYSTEMTIME_TO_STRING(fbLocalTime.systemTime), LEN:= 8, POS:= 12));
+		
+		nDbState := nDbState + 10;
+		
+	140 : // Write database
+		IF fbSqlCommand.Execute(pSQLCmd:= ADR(sCmdWrite), cbSQLCmd:= SIZEOF(sCmdWrite)) THEN
+			IF fbSqlCommand.bError THEN
+				nDbState := 1000;
+			ELSE
+				nDbState := 200;
+			END_IF
+		END_IF
+		
+	200 : // Read database
+		IF fbSqlCommand.ExecuteDataReturn(pSQLCmd:= ADR(sCmdRead), cbSQLCmd:= SIZEOF(sCmdRead), pSQLDBResult:= ADR(fbSqlResult)) THEN
+			IF fbSqlCommand.bError THEN
+				nDbState := 1000;
+			ELSE
+				nDbState := nDbState + 10;
+			END_IF
+		END_IF		
+	
+	210 : // Read result
+		IF fbSqlResult.Read(
+			nStartIndex:= 0, 
+			nRecordCount:= 1, 
+			pData:= ADR(stReadConvDb), 
+			cbData:= SIZEOF(stReadConvDb), 
+			bWithVerifying:= TRUE, 
+			bDataRelease:= FALSE)
+		THEN
+			IF fbSqlResult.bError THEN
+				nDbState := 1000;
+			ELSE
+				nDbState := nDbState + 10;
+			END_IF
+		END_IF
+		
+	220 : // Release cache (optional)
+		IF fbSqlResult.Release() THEN
+			IF fbSqlResult.bError THEN
+				nDbState := 1000;
+			ELSE
+				nDbState := 100;
+			END_IF
+		END_IF		
+		
+	1000 : // Error handling
+			
+END_CASE]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

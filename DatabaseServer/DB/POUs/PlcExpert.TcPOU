@@ -1,0 +1,154 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="PlcExpert" Id="{e58966b5-3a89-4304-a7a1-932f3dde8919}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM PlcExpert
+VAR
+	// Get local time from operating system
+	fbLocalTime		: FB_LocalSystemTime;		
+	
+	// Database write and read FB
+	fbPlcDbWrite    : FB_PLCDBWriteEvt(sNetID := '', tTimeout := T#5S);
+	fbPlcDbRead    	: FB_PLCDBReadEvt (sNetID := '', tTimeout := T#5S);
+	fbPlcDbReadDur 	: FB_PLCDBReadEvt (sNetID := '', tTimeout := T#5S);
+	
+	// Write and read data
+	stWriteDb		: ST_WriteDb;
+	stReadDb		: ST_ReadDb;
+	stReadConvDb	: ST_ReadConvDb;
+	
+	// Database column name
+	ColumnWrite     : ARRAY[0..3] OF STRING(50);
+	ColumnRead     	: ARRAY[0..4] OF STRING(50);
+	ColumnConvRead  : ARRAY[0..5] OF STRING(50);	
+	
+	// Program state
+	nDbState		: INT;
+	
+	// Record trigger
+	bMcRun			: BOOL;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[// Timestamp sync
+fbLocalTime(
+	sNetID:= , 
+	bEnable:= TRUE, 
+	dwCycle:= , 
+	dwOpt:= , 
+	tTimeout:= , 
+	bValid=> , 
+	systemTime=> , 
+	tzID=> );
+
+// Value
+stWriteDb.sMachine := 'Milling';
+stWriteDb.sWorkpiece := 'Shaft';
+
+// Column names
+ColumnWrite[0] := 'machine';
+ColumnWrite[1] := 'workpiece';
+ColumnWrite[2] := 'timestart';
+ColumnWrite[3] := 'timestop';
+
+ColumnRead[0] := 'id';
+ColumnRead[1] := 'machine';
+ColumnRead[2] := 'workpiece';
+ColumnRead[3] := 'timestart';
+ColumnRead[4] := 'timestop';
+
+ColumnConvRead[0] := 'id';
+ColumnConvRead[1] := 'machine';
+ColumnConvRead[2] := 'workpiece';
+ColumnConvRead[3] := 'timestart';
+ColumnConvRead[4] := 'timestop';
+ColumnConvRead[5] := 'duration';
+
+// Program sequence
+CASE nDbState OF
+	0 : // Init
+		bMcRun := FALSE;
+		
+		nDbState := nDbState + 10;
+		
+	10 : // Wait machine run
+		IF bMcRun THEN
+			nDbState := nDbState + 10;
+		END_IF
+		
+	20 : // Record time start
+		stWriteDb.dtTimeStart := SYSTEMTIME_TO_DT(fbLocalTime.systemTime);
+		
+		nDbState := nDbState + 10;
+		
+	30 : // Wait machine stop
+		IF NOT bMcRun THEN
+			nDbState := nDbState + 10;
+		END_IF
+		
+	40 : // Record time stop
+		stWriteDb.dtTimeStop := SYSTEMTIME_TO_DT(fbLocalTime.systemTime);
+		
+		nDbState := nDbState + 10;
+		
+	50 : // Write database
+		IF fbPlcDbWrite.WriteStruct(
+    		hDBID:= 1, 
+    		sTableName:= 'productionlog', 
+    		pRecord:= ADR(stWriteDb), 
+    		cbRecord:= SIZEOF(stWriteDb), 
+    		pColumnNames:= ADR(ColumnWrite) , 
+    		cbColumnNames:= SIZEOF(ColumnWrite))
+		THEN
+			IF fbPlcDbWrite.bError THEN
+				nDbState := 1000; 
+			ELSE
+				nDbState := 100;
+			END_IF
+		END_IF		
+		
+	100 : // Read database
+		IF fbPlcDbRead.ReadStruct(
+			hDBID:= 1, 
+			sTableName:= 'productionlog', 
+			pColumnNames:= ADR(ColumnRead), 
+			cbColumnNames:= SIZEOF(ColumnRead), 
+			sOrderByColumn:= ColumnRead[0], 
+			eOrderType:= E_OrderType.DESC, 
+			nStartIndex:= 0, 
+			nRecordCount:= 1, 
+			pData:= ADR(stReadDB), 
+			cbData:= SIZEOF(stReadDB))
+		THEN
+			IF fbPlcDbRead.bError THEN
+				nDbState := 1000; 
+			ELSE
+				nDbState := nDbState + 10;
+			END_IF
+		END_IF
+		
+	110 : // Read database with duration
+		IF fbPlcDbRead.ReadStruct(
+			hDBID:= 1, 
+			sTableName:= 'viewinterval', 
+			pColumnNames:= ADR(ColumnConvRead), 
+			cbColumnNames:= SIZEOF(ColumnConvRead), 
+			sOrderByColumn:= ColumnRead[0], 
+			eOrderType:= E_OrderType.DESC, 
+			nStartIndex:= 0, 
+			nRecordCount:= 1, 
+			pData:= ADR(stReadConvDb), 
+			cbData:= SIZEOF(stReadConvDb))
+		THEN
+			IF fbPlcDbRead.bError THEN
+				nDbState := 1000; 
+			ELSE
+				nDbState := 0;
+			END_IF
+		END_IF
+		
+	1000 : // Error handling
+	
+END_CASE]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,14 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="ST_ReadDb" Id="{c6cf3819-0545-4477-ba10-06520338704b}">
+    <Declaration><![CDATA[TYPE ST_ReadDb :
+STRUCT
+	nId			: DINT;
+	sMachine	: STRING(20);
+	sWorkpiece	: STRING(20);
+	dtTimestart	: DT;
+	dtTimestop	: DT;
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

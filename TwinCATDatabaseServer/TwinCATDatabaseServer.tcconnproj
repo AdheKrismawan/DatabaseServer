@@ -1,0 +1,26 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{fffde0d4-56e2-4871-94ed-6e6b3b3f745a}</ProjectGuid>
+    <AssemblyName>TwinCATDatabaseServer</AssemblyName>
+    <Name>TwinCATDatabaseServer</Name>
+    <RootNamespace>TwinCATDatabaseServer</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Include="TcDbServer.tcdbsrv">
+      <SubType>Content</SubType>
+    </Content>
+  </ItemGroup>
+  <ItemGroup>
+    <tcdbsrvdbCompile Include="TcDbServer\DB\DB.tcdbsrvdb">
+      <DependentUpon>TcDbServer.tcdbsrv</DependentUpon>
+    </tcdbsrvdbCompile>
+  </ItemGroup>
+  <!-- This next bit is required unless the macro used to Import your targets is defined in an MSBuild toolset. -->
+  <ProjectExtensions>
+    <ProjectCapabilities>
+      <ProjectConfigurationsDeclaredAsItems />
+      <TcConnectivity />
+    </ProjectCapabilities>
+  </ProjectExtensions>
+</Project>

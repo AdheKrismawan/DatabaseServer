@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="ST_WriteDb" Id="{4f8bc6e7-71b5-477f-b6e7-7e9d877dfcb9}">
+    <Declaration><![CDATA[TYPE ST_WriteDb :
+STRUCT
+	sMachine	: STRING(20);
+	sWorkpiece	: STRING(20);
+	dtTimeStart	: DT;
+	dtTimeStop	: DT;
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>
